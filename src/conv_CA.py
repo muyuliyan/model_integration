@@ -5,9 +5,6 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torch.utils.data as data
-from util import download_mnist_if_needed
-
-download_mnist_if_needed('./data')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'Using device: {device}')
@@ -15,39 +12,36 @@ print(f'Using device: {device}')
 class ModelA(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.conv = nn.Conv2d(3, 16, kernel_size=3, padding=1)
     def forward(self, x):
         out = F.relu(self.conv(x))
-        res = out - x
-        return res
+        return out
 
 class ModelB(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv = nn.Conv2d(1, 16, kernel_size=5, padding=2)
+        self.conv = nn.Conv2d(3, 16, kernel_size=5, padding=2)
     def forward(self, x):
         out = F.relu(self.conv(x))
-        res = out - x
-        return res
+        return out
 
 class ModelC(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.conv = nn.Conv2d(3, 16, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2)
     def forward(self, x):
         out = self.pool(F.relu(self.conv(x)))
-        res = F.interpolate(out, size=x.shape[2:]) - x
-        return res
+        out = F.interpolate(out, size=x.shape[2:])
+        return out
     
 class ModelD(nn.Module):
     def __init__ (self):
         super().__init__()
-        self.conv = nn.Conv2d(1, 16, kernel_size=3, padding=2, dilation=2)
+        self.conv = nn.Conv2d(3, 16, kernel_size=3, padding=2, dilation=2)
     def forward(self, x):
         out = F.relu(self.conv(x))
-        res = out - x
-        return res
+        return out
 
 class BigModel(nn.Module):
     def __init__(self):
@@ -92,8 +86,7 @@ class HybridAttention(nn.Module):
             nn.Sigmoid()
         )
         self.fusion = nn.Conv2d(channels*2, channels, 1)
-        
-        self.residual = nn.Parameter(torch.zeros(1))
+        self.residual = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, x):
         global_w = self.global_att(x)
@@ -134,20 +127,23 @@ if __name__ == "__main__":
         os.makedirs(save_dir)
         print(f"Created directory: {save_dir}")
 
-    transforms = transforms.Compose([
+    transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,)),
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(num_output_channels=1)   
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        transforms.Resize((32, 32)),
     ])
 
-    dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transforms)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64)
-    test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transforms)
+    # 使用CIFAR10数据集
+    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    
+    # 分割训练集和验证集
+    train_size = int(0.8 * len(train_dataset))
+    val_size = len(train_dataset) - train_size
+    train_subset, val_subset = random_split(train_dataset, [train_size, val_size])
+    
+    train_loader = DataLoader(train_subset, batch_size=64, shuffle=True)
+    val_loader = DataLoader(val_subset, batch_size=64)
     test_loader = DataLoader(test_dataset, batch_size=64)
 
     model = EnsembleModel().to(device)
